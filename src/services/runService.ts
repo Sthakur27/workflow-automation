@@ -13,10 +13,11 @@ export async function triggerWorkflow(
   triggerValue: string
 ): Promise<WorkflowRun | null> {
   try {
+    logger.info(`Triggering workflow for ${triggerType}:${triggerValue}`);
     // Find workflows matching the trigger
     const result = await query(
       `SELECT * FROM workflows 
-       WHERE trigger->>'type' = $1 AND trigger->>'value' = $2`,
+       WHERE trigger_type = $1 AND trigger_value = $2`,
       [triggerType, triggerValue]
     );
 
@@ -27,7 +28,12 @@ export async function triggerWorkflow(
       return null;
     }
 
+    logger.info(
+      `Found ${result.rows.length} workflows for trigger type ${triggerType} and value ${triggerValue}`
+    );
+
     // Get the first matching workflow
+    // eventually support multiple workflows
     const workflowRow = result.rows[0];
     const workflow: Workflow = {
       id: workflowRow.id,
@@ -39,6 +45,9 @@ export async function triggerWorkflow(
       created_at: workflowRow.created_at,
       updated_at: workflowRow.updated_at,
     };
+    logger.info(
+      `Triggering workflow ${workflow.name} for ${triggerType}:${triggerValue}`
+    );
 
     // Create a new run
     return await createRun(workflow);
@@ -80,17 +89,13 @@ export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
 
     // Insert the run into the database
     await query(
-      `INSERT INTO workflow_runs (id, workflow_id, status, trigger, started_at, steps)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        run.id,
-        run.workflow_id,
-        run.status,
-        JSON.stringify(run.trigger),
-        run.started_at,
-        JSON.stringify(run.steps),
-      ]
+      `INSERT INTO workflow_runs (id, workflow_id, status, started_at)
+       VALUES ($1, $2, $3, $4)`,
+      [run.id, run.workflow_id, run.status, run.started_at]
     );
+
+    logger.info(`Created run ${run.id} for workflow ${workflow.name}`);
+    logger.info(`Executing run ${run.id}`);
 
     // Execute the run asynchronously
     executeRun(run, workflow).catch((error) => {
