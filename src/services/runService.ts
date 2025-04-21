@@ -5,29 +5,8 @@ import { logger } from "../utils/logger";
 import { v4 as uuidv4 } from "uuid";
 import * as workflowService from "./workflowService";
 
-// Mock integrations
-const mockIntegrations: { [key: string]: (config: any) => Promise<any> } = {
-  email: async (config: any) => {
-    logger.info(
-      `MOCK: Sending email to ${config.to} with subject "${config.subject}"`
-    );
-    return { success: true, messageId: uuidv4() };
-  },
-  slack: async (config: any) => {
-    logger.info(
-      `MOCK: Sending Slack message to channel ${config.channel}: "${config.message}"`
-    );
-    return { success: true, timestamp: new Date().toISOString() };
-  },
-  http: async (config: any) => {
-    logger.info(`MOCK: Making HTTP ${config.method} request to ${config.url}`);
-    return { success: true, status: 200, data: { message: "Success" } };
-  },
-  log: async (config: any) => {
-    logger.info(`WORKFLOW LOG: ${config.message}`);
-    return { success: true };
-  },
-};
+// Import the integration module
+import { executeIntegration } from "../integrations";
 
 export async function triggerWorkflow(
   triggerType: string,
@@ -141,7 +120,7 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
       await updateRunStatus(run.id, RunStatus.COMPLETED);
       return;
     }
-    
+
     for (let i = 0; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
       const stepRun = run.steps[i];
@@ -153,51 +132,56 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
       try {
         // Process input mapping if it exists
         let stepConfig = { ...step.step_config };
-        
+
         if (step.input_mapping) {
           // Process each input mapping
-          for (const [inputKey, mappingValue] of Object.entries(step.input_mapping)) {
+          for (const [inputKey, mappingValue] of Object.entries(
+            step.input_mapping
+          )) {
             // Check if it's a reference to a previous step's output
-            if (mappingValue.includes(':')) {
-              const [refStepId, outputPath] = mappingValue.split(':');
+            if (mappingValue.includes(":")) {
+              const [refStepId, outputPath] = mappingValue.split(":");
               const stepId = parseInt(refStepId, 10);
-              
+
               // Ensure the referenced step exists and has output
               if (stepOutputs[stepId]) {
                 // Navigate the output path (e.g., "data.items.0.id")
                 let value = stepOutputs[stepId];
-                const pathParts = outputPath.split('.');
-                
+                const pathParts = outputPath.split(".");
+
                 for (const part of pathParts) {
-                  if (value && typeof value === 'object' && part in value) {
+                  if (value && typeof value === "object" && part in value) {
                     value = value[part];
                   } else {
                     value = undefined;
                     break;
                   }
                 }
-                
+
                 // Set the input value from the previous step's output
                 stepConfig[inputKey] = value;
-                
+
                 // Log the data passing between steps
-                logger.info(`Passing data from step ${stepId} to step ${step.id}: ${inputKey} = ${JSON.stringify(value)}`);
+                logger.info(
+                  `Passing data from step ${stepId} to step ${
+                    step.id
+                  }: ${inputKey} = ${JSON.stringify(value)}`
+                );
               } else {
-                logger.warn(`Referenced step ${stepId} not found or has no output`);
+                logger.warn(
+                  `Referenced step ${stepId} not found or has no output`
+                );
               }
             }
           }
         }
-        
+
         // Execute the step using the appropriate integration
         const stepType = step.step_type;
-        if (!mockIntegrations[stepType]) {
-          throw new Error(`Unknown step type: ${stepType}`);
-        }
 
-        // Pass the processed config to the integration
-        const output = await mockIntegrations[stepType](stepConfig);
-        
+        // Pass the processed config to the integration using our helper function
+        const output = await executeIntegration(stepType, stepConfig);
+
         // Store the output for potential use by subsequent steps
         stepOutputs[step.id] = output;
 
