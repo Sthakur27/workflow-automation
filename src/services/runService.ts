@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as workflowService from "./workflowService";
 
 // Mock integrations
-const mockIntegrations = {
+const mockIntegrations: { [key: string]: (config: any) => Promise<any> } = {
   email: async (config: any) => {
     logger.info(
       `MOCK: Sending email to ${config.to} with subject "${config.subject}"`
@@ -130,7 +130,18 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
     run.status = RunStatus.RUNNING;
     await updateRunStatus(run.id, RunStatus.RUNNING);
 
+    // Store the outputs of each step to be used by subsequent steps
+    const stepOutputs: { [stepId: number]: any } = {};
+
     // Execute each step in sequence
+    if (!workflow.steps || workflow.steps.length === 0) {
+      // No steps to execute, mark as completed
+      run.status = RunStatus.COMPLETED;
+      run.completed_at = new Date();
+      await updateRunStatus(run.id, RunStatus.COMPLETED);
+      return;
+    }
+    
     for (let i = 0; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
       const stepRun = run.steps[i];
@@ -140,13 +151,55 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
       await updateStepStatus(run.id, stepRun.id, RunStatus.RUNNING);
 
       try {
+        // Process input mapping if it exists
+        let stepConfig = { ...step.step_config };
+        
+        if (step.input_mapping) {
+          // Process each input mapping
+          for (const [inputKey, mappingValue] of Object.entries(step.input_mapping)) {
+            // Check if it's a reference to a previous step's output
+            if (mappingValue.includes(':')) {
+              const [refStepId, outputPath] = mappingValue.split(':');
+              const stepId = parseInt(refStepId, 10);
+              
+              // Ensure the referenced step exists and has output
+              if (stepOutputs[stepId]) {
+                // Navigate the output path (e.g., "data.items.0.id")
+                let value = stepOutputs[stepId];
+                const pathParts = outputPath.split('.');
+                
+                for (const part of pathParts) {
+                  if (value && typeof value === 'object' && part in value) {
+                    value = value[part];
+                  } else {
+                    value = undefined;
+                    break;
+                  }
+                }
+                
+                // Set the input value from the previous step's output
+                stepConfig[inputKey] = value;
+                
+                // Log the data passing between steps
+                logger.info(`Passing data from step ${stepId} to step ${step.id}: ${inputKey} = ${JSON.stringify(value)}`);
+              } else {
+                logger.warn(`Referenced step ${stepId} not found or has no output`);
+              }
+            }
+          }
+        }
+        
         // Execute the step using the appropriate integration
-        const actionType = step.action.type;
-        if (!mockIntegrations[actionType]) {
-          throw new Error(`Unknown action type: ${actionType}`);
+        const stepType = step.step_type;
+        if (!mockIntegrations[stepType]) {
+          throw new Error(`Unknown step type: ${stepType}`);
         }
 
-        const output = await mockIntegrations[actionType](step.action.config);
+        // Pass the processed config to the integration
+        const output = await mockIntegrations[stepType](stepConfig);
+        
+        // Store the output for potential use by subsequent steps
+        stepOutputs[step.id] = output;
 
         // Update step status to COMPLETED
         stepRun.status = RunStatus.COMPLETED;
@@ -168,9 +221,9 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
 
         // Update run status to FAILED
         run.status = RunStatus.FAILED;
-        run.completedAt = new Date();
-        run.error = `Step ${i + 1} failed: ${error.message}`;
-        await updateRunStatus(run.id, RunStatus.FAILED, run.error);
+        run.completed_at = new Date();
+        run.error_message = `Step ${i + 1} failed: ${(error as Error).message}`;
+        await updateRunStatus(run.id, RunStatus.FAILED, run.error_message);
 
         return;
       }
