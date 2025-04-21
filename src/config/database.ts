@@ -58,4 +58,7 @@ export async function withTransaction<T>(
   }
 }
 
+// Export the pool directly
+export { pool };
+
 export default { query, withTransaction, initializeDatabase };

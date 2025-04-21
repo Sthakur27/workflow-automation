@@ -1,23 +1,23 @@
 import express from "express";
 import workflowController from "./controllers/workflowController";
-import executionController from "./controllers/executionController";
+import runController from "./controllers/runController";
 
 const router = express.Router();
 
-// Workflow routes
+// Workflow management
 router.post("/workflows", workflowController.createWorkflow);
 router.get("/workflows", workflowController.listWorkflows);
 router.get("/workflows/:id", workflowController.getWorkflow);
+router.get("/workflows/:id/runs", runController.getWorkflowRuns);
 
-// Execution routes
-router.get("/workflows/:id/runs", executionController.getWorkflowRuns);
-router.get("/runs/:runId", executionController.getWorkflowRun);
-router.post("/runs/:runId/retry", executionController.retryWorkflowRun);
+// Workflow run execution + retry
+router.get("/runs/:runId", runController.getWorkflowRun);
+router.post("/runs/:runId/retry", runController.retryWorkflowRun);
 
-// Trigger route - this would be more sophisticated in a production system
+// Manual trigger
 router.post(
   "/trigger/:triggerType/:triggerValue",
-  executionController.triggerWorkflow
+  runController.triggerWorkflow
 );
 
 export default router;
