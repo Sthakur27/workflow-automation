@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   status VARCHAR(20) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE,
-  error_message TEXT
-  retry_of INTEGER REFERENCES workflow_runs(id) ON DELETE SET NULL,
+  error_message TEXT,
+  retry_of INTEGER REFERENCES workflow_runs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS workflow_step_runs (

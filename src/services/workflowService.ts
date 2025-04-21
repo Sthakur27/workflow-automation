@@ -61,7 +61,7 @@ export async function listWorkflows(): Promise<Workflow[]> {
 
     const workflows: Workflow[] = [];
     for (const row of result.rows) {
-      const workflow = {
+      const workflow: Workflow = {
         id: row.id,
         name: row.name,
         description: row.description,

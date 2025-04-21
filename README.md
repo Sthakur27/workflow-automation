@@ -104,7 +104,7 @@ ANTHROPIC_API_KEY=sk-ant-api...
 ### 5. Run Database Migrations
 
 ```bash
-npm run migrate
+psql -h localhost -p 5432 -U your_username -d workflow_automation -f ./migrations/initial.sql
 ```
 
 ### 6. Build and Start the Server
