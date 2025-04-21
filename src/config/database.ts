@@ -1,17 +1,10 @@
 import { Pool } from "pg";
 import { logger } from "../utils/logger";
 
+// Initialize environment variables
+import { config } from "./index";
 // Create a new pool instance with connection parameters from environment variables
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || "localhost",
-  port: parseInt(process.env.POSTGRES_PORT || "5432"),
-  user: process.env.POSTGRES_USER || "postgres",
-  password: process.env.POSTGRES_PASSWORD || "postgres",
-  database: process.env.POSTGRES_DB || "workflow_automation",
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+const pool = new Pool(config.db);
 
 // Test the database connection
 export async function initializeDatabase() {

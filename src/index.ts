@@ -4,9 +4,6 @@ import { logger } from "./utils/logger";
 import routes from "./api/routes";
 import { initializeDatabase } from "./config/database";
 
-// Initialize environment variables
-dotenv.config();
-
 const app = express();
 const port = process.env.PORT || 3000;
 
