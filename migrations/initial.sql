@@ -2,9 +2,12 @@
 -- (This needs to be run separately as a superuser)
 -- CREATE DATABASE workflow_automation;
 
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Create tables
 CREATE TABLE IF NOT EXISTS workflows (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name VARCHAR(255) NOT NULL,
   description TEXT,
   trigger_type VARCHAR(50) NOT NULL,
@@ -14,8 +17,8 @@ CREATE TABLE IF NOT EXISTS workflows (
 );
 
 CREATE TABLE IF NOT EXISTS workflow_steps (
-  id SERIAL PRIMARY KEY,
-  workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   step_type VARCHAR(50) NOT NULL,
   step_config JSONB NOT NULL,
   step_order INTEGER NOT NULL,
@@ -24,19 +27,19 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
 );
 
 CREATE TABLE IF NOT EXISTS workflow_runs (
-  id SERIAL PRIMARY KEY,
-  workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE,
   error_message TEXT,
-  retry_of INTEGER REFERENCES workflow_runs(id) ON DELETE SET NULL
+  retry_of UUID REFERENCES workflow_runs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS workflow_step_runs (
-  id SERIAL PRIMARY KEY,
-  workflow_run_id INTEGER NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
-  workflow_step_id INTEGER NOT NULL REFERENCES workflow_steps(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workflow_run_id UUID NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  workflow_step_id UUID NOT NULL REFERENCES workflow_steps(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE,

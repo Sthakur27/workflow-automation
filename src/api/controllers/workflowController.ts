@@ -4,25 +4,32 @@ import { logger } from "../../utils/logger";
 
 export async function createWorkflow(req: Request, res: Response) {
   try {
-    const { name, description, trigger_type, trigger_value, steps } = req.body;
+    const { name, description, trigger_type, trigger_value, steps, natural_language_description } = req.body;
 
     // Validate input
-    if (!name || !description || !trigger_type || !trigger_value) {
+    if (!name || !description) {
       return res.status(400).json({
-        error:
-          "Missing required fields: name, description, trigger_type, and trigger_value are required",
+        error: "Missing required fields: name and description are required",
+      });
+    }
+    
+    // Either trigger_type and trigger_value OR natural_language_description must be provided
+    if ((!trigger_type || !trigger_value) && !natural_language_description) {
+      return res.status(400).json({
+        error: "Either trigger_type and trigger_value OR natural_language_description must be provided",
       });
     }
 
-    const workflow = await workflowService.createWorkflow({
+    const workflowResponse = await workflowService.createWorkflow({
       name,
       description,
       trigger_type,
       trigger_value,
+      natural_language_description,
       steps,
     });
 
-    return res.status(201).json(workflow);
+    return res.status(201).json(workflowResponse);
   } catch (error) {
     logger.error("Error in createWorkflow controller:", error);
     return res.status(500).json({
@@ -47,13 +54,13 @@ export async function getWorkflow(req: Request, res: Response) {
   try {
     const { id } = req.params;
 
-    // Validate id is a number
-    const workflowId = parseInt(id, 10);
-    if (isNaN(workflowId)) {
-      return res.status(400).json({ error: "Invalid workflow ID" });
+    // Validate id is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "Invalid workflow ID format. Must be a valid UUID." });
     }
 
-    const workflow = await workflowService.getWorkflow(workflowId);
+    const workflow = await workflowService.getWorkflow(id);
 
     if (!workflow) {
       return res.status(404).json({ error: "Workflow not found" });

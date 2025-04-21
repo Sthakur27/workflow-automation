@@ -1,6 +1,6 @@
 export interface WorkflowStep {
-  id: number;
-  workflow_id: number;
+  id: string; // UUID
+  workflow_id: string; // UUID
   step_type: string;
   step_config: any;
   // Input mapping allows referencing outputs from previous steps

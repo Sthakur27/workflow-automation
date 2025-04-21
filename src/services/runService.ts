@@ -33,10 +33,11 @@ export async function triggerWorkflow(
       id: workflowRow.id,
       name: workflowRow.name,
       description: workflowRow.description,
-      trigger: workflowRow.trigger,
+      trigger_type: workflowRow.trigger_type,
+      trigger_value: workflowRow.trigger_value,
       steps: workflowRow.steps,
-      createdAt: workflowRow.created_at,
-      updatedAt: workflowRow.updated_at,
+      created_at: workflowRow.created_at,
+      updated_at: workflowRow.updated_at,
     };
 
     // Create a new run
@@ -66,8 +67,8 @@ export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
       started_at: new Date(),
       steps: workflow.steps
         ? workflow.steps.map((step) => ({
-            id: step.id,
-            workflow_run_id: parseInt(runId),
+            id: uuidv4(), // Generate a new UUID for each step run
+            workflow_run_id: runId, // Use the run UUID directly
             workflow_step_id: step.id,
             status: "pending",
             started_at: new Date(),
@@ -110,7 +111,7 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
     await updateRunStatus(run.id, RunStatus.RUNNING);
 
     // Store the outputs of each step to be used by subsequent steps
-    const stepOutputs: { [stepId: number]: any } = {};
+    const stepOutputs: { [stepId: string]: any } = {};
 
     // Execute each step in sequence
     if (!workflow.steps || workflow.steps.length === 0) {
@@ -191,16 +192,18 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
         stepRun.output = output;
         await updateStepStatus(run.id, stepRun.id, RunStatus.COMPLETED, output);
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         // Update step status to FAILED
         stepRun.status = RunStatus.FAILED;
         stepRun.completed_at = new Date();
-        stepRun.error_message = error.message;
+        stepRun.error_message = message;
         await updateStepStatus(
           run.id,
           stepRun.id,
           RunStatus.FAILED,
           null,
-          error.message
+          message
         );
 
         // Update run status to FAILED
@@ -215,14 +218,14 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
 
     // All steps completed successfully
     run.status = RunStatus.COMPLETED;
-    run.completedAt = new Date();
+    run.completed_at = new Date();
     await updateRunStatus(run.id, RunStatus.COMPLETED);
   } catch (error) {
     // Update run status to FAILED
     run.status = RunStatus.FAILED;
-    run.completedAt = new Date();
-    run.error = `Run execution error: ${error.message}`;
-    await updateRunStatus(run.id, RunStatus.FAILED, run.error);
+    run.completed_at = new Date();
+    run.error_message = `Run execution error: ${(error as Error).message}`;
+    await updateRunStatus(run.id, RunStatus.FAILED, run.error_message);
   }
 }
 
@@ -287,13 +290,13 @@ export async function getWorkflowRuns(
 
     return result.rows.map((row: any) => ({
       id: row.id,
-      workflowId: row.workflow_id,
+      workflow_id: row.workflow_id,
       status: row.status,
       trigger: row.trigger,
-      startedAt: row.started_at,
-      completedAt: row.completed_at,
+      started_at: row.started_at,
+      completed_at: row.completed_at,
       steps: row.steps,
-      error: row.error,
+      error_message: row.error_message,
     }));
   } catch (error) {
     logger.error(`Error getting runs for workflow ${workflowId}:`, error);
@@ -316,13 +319,13 @@ export async function getWorkflowRun(
     const row = result.rows[0];
     return {
       id: row.id,
-      workflowId: row.workflow_id,
+      workflow_id: row.workflow_id,
       status: row.status,
       trigger: row.trigger,
-      startedAt: row.started_at,
-      completedAt: row.completed_at,
+      started_at: row.started_at,
+      completed_at: row.completed_at,
       steps: row.steps,
-      error: row.error,
+      error_message: row.error_message,
     };
   } catch (error) {
     logger.error(`Error getting run ${runId}:`, error);
@@ -346,9 +349,9 @@ export async function retryWorkflowRun(
     }
 
     // Get the workflow
-    const workflow = await workflowService.getWorkflow(run.workflowId);
+    const workflow = await workflowService.getWorkflow(run.workflow_id);
     if (!workflow) {
-      throw new Error(`Workflow ${run.workflowId} not found`);
+      throw new Error(`Workflow ${run.workflow_id} not found`);
     }
 
     // Create a new run

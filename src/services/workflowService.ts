@@ -1,46 +1,97 @@
 import { query, pool } from "../config/database";
-import { Workflow, CreateWorkflowDto } from "../models/workflow";
+import {
+  Workflow,
+  CreateWorkflowDto,
+  WorkflowCreationResponse,
+} from "../models/workflow";
 import { logger } from "../utils/logger";
 
 export async function createWorkflow(
   workflowData: CreateWorkflowDto
-): Promise<Workflow> {
+): Promise<WorkflowCreationResponse> {
   try {
     // Start a transaction
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
 
+      // Determine trigger type and value
+      // If not provided, they would be inferred from natural language description in a real system
+      const triggerType = workflowData.trigger_type || "manual";
+      const triggerValue =
+        workflowData.trigger_value ||
+        workflowData.name.toLowerCase().replace(/\s+/g, "_");
+
       // Insert the workflow
       const workflowResult = await client.query(
         `INSERT INTO workflows (name, description, trigger_type, trigger_value)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [
-          workflowData.name,
-          workflowData.description,
-          workflowData.trigger_type,
-          workflowData.trigger_value,
-        ]
+        [workflowData.name, workflowData.description, triggerType, triggerValue]
       );
 
       const workflow = workflowResult.rows[0];
+      const workflowSteps = [];
 
       // Insert steps if provided
       if (workflowData.steps && workflowData.steps.length > 0) {
         for (const step of workflowData.steps) {
-          await client.query(
+          const stepResult = await client.query(
             `INSERT INTO workflow_steps (workflow_id, step_type, step_config, step_order)
-             VALUES ($1, $2, $3, $4)`,
+             VALUES ($1, $2, $3, $4)
+             RETURNING *`,
             [workflow.id, step.step_type, step.step_config, step.step_order]
           );
+          workflowSteps.push(stepResult.rows[0]);
         }
       }
 
       await client.query("COMMIT");
 
-      // Return the created workflow with steps
-      return await getWorkflow(workflow.id);
+      // Construct the workflow object with steps
+      const createdWorkflow: Workflow = {
+        id: workflow.id,
+        name: workflow.name,
+        description: workflow.description,
+        trigger_type: workflow.trigger_type,
+        trigger_value: workflow.trigger_value,
+        created_at: workflow.created_at,
+        updated_at: workflow.updated_at,
+        steps: workflowSteps.map((step) => ({
+          id: step.id,
+          workflow_id: step.workflow_id,
+          step_type: step.step_type,
+          step_config: step.step_config,
+          step_order: step.step_order,
+          created_at: step.created_at,
+          updated_at: step.updated_at,
+        })),
+      };
+
+      // Create the structured response
+      const response: WorkflowCreationResponse = {
+        workflow: createdWorkflow,
+        inferred_data: {
+          trigger: {
+            type: workflow.trigger_type,
+            value: workflow.trigger_value,
+            description: `Workflow will be triggered when ${workflow.trigger_type} event with value '${workflow.trigger_value}' occurs`,
+          },
+          steps: workflowSteps.map((step) => ({
+            id: step.id,
+            type: step.step_type,
+            config: step.step_config,
+            order: step.step_order,
+          })),
+        },
+        metadata: {
+          created_at: workflow.created_at,
+          updated_at: workflow.updated_at,
+          execution_estimate: estimateExecutionTime(workflowSteps),
+        },
+      };
+
+      return response;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -97,7 +148,42 @@ export async function listWorkflows(): Promise<Workflow[]> {
   }
 }
 
-export async function getWorkflow(id: number): Promise<Workflow | null> {
+function estimateExecutionTime(steps: any[]): string {
+  // Simple estimation based on step types
+  // In a real system, this would be more sophisticated
+  const baseTime = 500; // Base time in ms
+  let totalTime = baseTime;
+
+  for (const step of steps) {
+    switch (step.step_type) {
+      case "email":
+        totalTime += 1000; // Email typically takes ~1s
+        break;
+      case "slack":
+        totalTime += 800; // Slack message ~800ms
+        break;
+      case "http":
+        totalTime += 1500; // HTTP requests ~1.5s
+        break;
+      case "log":
+        totalTime += 100; // Logging is fast ~100ms
+        break;
+      default:
+        totalTime += 500; // Default for unknown types
+    }
+  }
+
+  // Format the time estimate
+  if (totalTime < 1000) {
+    return `${totalTime}ms`;
+  } else if (totalTime < 60000) {
+    return `${(totalTime / 1000).toFixed(1)}s`;
+  } else {
+    return `${(totalTime / 60000).toFixed(1)}m`;
+  }
+}
+
+export async function getWorkflow(id: string): Promise<Workflow | null> {
   try {
     const result = await query("SELECT * FROM workflows WHERE id = $1", [id]);
 
