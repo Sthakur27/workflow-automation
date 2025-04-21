@@ -8,7 +8,6 @@ const router = express.Router();
 router.post("/workflows", workflowController.createWorkflow);
 router.get("/workflows", workflowController.listWorkflows);
 router.get("/workflows/:id", workflowController.getWorkflow);
-router.delete("/workflows/:id", workflowController.deleteWorkflow);
 
 // Execution routes
 router.get("/workflows/:id/runs", executionController.getWorkflowRuns);
