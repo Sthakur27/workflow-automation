@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { Anthropic } from "@anthropic-ai/sdk";
 import { logger } from "../utils/logger";
 
 // Load environment variables
@@ -26,7 +26,7 @@ export interface ClaudeResponse {
 export async function generateResponse(
   prompt: string,
   messages: ClaudeMessage[] = [],
-  model: string = "claude-3-sonnet-20240229"
+  model: string = "claude-3-5-sonnet-latest"
 ): Promise<ClaudeResponse> {
   try {
     const allMessages: ClaudeMessage[] = [
@@ -34,17 +34,26 @@ export async function generateResponse(
       { role: "user", content: prompt },
     ];
 
-    const response = await anthropic.completions.create({
+    const response = await anthropic.messages.create({
       model,
-      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
-      max_tokens_to_sample: 4000,
+      messages: allMessages,
+      max_tokens: 4000,
     });
+    // Extract text content from the response
+    let content = "";
+    if (response.content && response.content.length > 0) {
+      const block = response.content[0];
+      if ("text" in block) {
+        content = block.text;
+      }
+    }
+
     return {
-      content: response.completion,
+      content,
       model: response.model,
       usage: {
-        input_tokens: 0, // Not available in completions API
-        output_tokens: 0, // Not available in completions API
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
       },
     };
   } catch (error) {
