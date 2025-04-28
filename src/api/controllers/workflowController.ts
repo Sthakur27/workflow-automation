@@ -4,29 +4,26 @@ import { logger } from "../../utils/logger";
 
 export async function createWorkflow(req: Request, res: Response) {
   try {
-    const { name, description, trigger_type, trigger_value, steps, natural_language_description } = req.body;
+    const { name, natural_language_description } = req.body;
 
     // Validate input
-    if (!name || !description) {
+    if (!name) {
       return res.status(400).json({
-        error: "Missing required fields: name and description are required",
+        error: "Missing required field: name is required",
       });
     }
-    
-    // Either trigger_type and trigger_value OR natural_language_description must be provided
-    if ((!trigger_type || !trigger_value) && !natural_language_description) {
+
+    // Natural language description is now the preferred way to create workflows
+    // If neither natural_language_description nor trigger details are provided, return an error
+    if (!natural_language_description) {
       return res.status(400).json({
-        error: "Either trigger_type and trigger_value OR natural_language_description must be provided",
+        error: "A natural language description of the workflow is required",
       });
     }
 
     const workflowResponse = await workflowService.createWorkflow({
       name,
-      description,
-      trigger_type,
-      trigger_value,
       natural_language_description,
-      steps,
     });
 
     return res.status(201).json(workflowResponse);
@@ -55,9 +52,12 @@ export async function getWorkflow(req: Request, res: Response) {
     const { id } = req.params;
 
     // Validate id is a valid UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
-      return res.status(400).json({ error: "Invalid workflow ID format. Must be a valid UUID." });
+      return res
+        .status(400)
+        .json({ error: "Invalid workflow ID format. Must be a valid UUID." });
     }
 
     const workflow = await workflowService.getWorkflow(id);

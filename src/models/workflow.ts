@@ -18,18 +18,7 @@ export interface WorkflowInput {
 
 export interface CreateWorkflowDto {
   name: string;
-  description: string;
-  // If trigger_type and trigger_value are provided, use them directly
-  // Otherwise, they should be inferred from the natural language description
-  trigger_type?: string;
-  trigger_value?: string;
-  natural_language_description?: string;
-  steps?: Array<{
-    step_type: string;
-    step_config: any;
-    step_order: number;
-    input_mapping?: Record<string, string>;
-  }>;
+  natural_language_description: string;
 }
 
 // Response type for workflow creation

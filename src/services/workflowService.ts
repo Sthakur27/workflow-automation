@@ -5,6 +5,8 @@ import {
   WorkflowCreationResponse,
 } from "../models/workflow";
 import { logger } from "../utils/logger";
+import * as nlpService from "./nlpService";
+import { v4 as uuidv4 } from "uuid";
 
 export async function createWorkflow(
   workflowData: CreateWorkflowDto
@@ -15,32 +17,78 @@ export async function createWorkflow(
     try {
       await client.query("BEGIN");
 
-      // Determine trigger type and value
-      // If not provided, they would be inferred from natural language description in a real system
-      const triggerType = workflowData.trigger_type || "manual";
-      const triggerValue =
-        workflowData.trigger_value ||
-        workflowData.name.toLowerCase().replace(/\s+/g, "_");
+      // Variables to store inferred data
+      let description = "";
+      let triggerType = null;
+      let triggerValue = null;
+      let inferredData = null;
+
+      // If natural language description is provided, use NLP to infer workflow configuration
+      if (
+        workflowData.natural_language_description &&
+        (!triggerType || !triggerValue)
+      ) {
+        try {
+          const inferredConfig = await nlpService.inferWorkflowConfig(
+            workflowData.natural_language_description,
+            workflowData.name
+          );
+
+          // Use inferred description, trigger type and value
+          description = inferredConfig.description;
+          triggerType = inferredConfig.trigger_type;
+          triggerValue = inferredConfig.trigger_value;
+
+          // Store inferred data for response
+          inferredData = {
+            trigger: {
+              type: inferredConfig.trigger_type,
+              value: inferredConfig.trigger_value,
+              description: inferredConfig.trigger_description,
+            },
+            steps: inferredConfig.steps.map((step) => ({
+              id: uuidv4(),
+              type: step.step_type,
+              config: step.step_config,
+              order: step.step_order,
+            })),
+          };
+
+          // The steps will be used when creating workflow steps in the database
+        } catch (error) {
+          logger.error("Error inferring workflow configuration:", error);
+          // Fall back to default values if inference fails
+          triggerType = triggerType || "manual";
+          triggerValue =
+            triggerValue ||
+            workflowData.name.toLowerCase().replace(/\s+/g, "_");
+        }
+      } else {
+        // Use provided values or defaults
+        triggerType = triggerType || "manual";
+        triggerValue =
+          triggerValue || workflowData.name.toLowerCase().replace(/\s+/g, "_");
+      }
 
       // Insert the workflow
       const workflowResult = await client.query(
         `INSERT INTO workflows (name, description, trigger_type, trigger_value)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [workflowData.name, workflowData.description, triggerType, triggerValue]
+        [workflowData.name, description, triggerType, triggerValue]
       );
 
       const workflow = workflowResult.rows[0];
       const workflowSteps = [];
 
-      // Insert steps if provided
-      if (workflowData.steps && workflowData.steps.length > 0) {
-        for (const step of workflowData.steps) {
+      // Insert steps from the inferred configuration
+      if (inferredData && inferredData.steps && inferredData.steps.length > 0) {
+        for (const step of inferredData.steps) {
           const stepResult = await client.query(
             `INSERT INTO workflow_steps (workflow_id, step_type, step_config, step_order)
              VALUES ($1, $2, $3, $4)
              RETURNING *`,
-            [workflow.id, step.step_type, step.step_config, step.step_order]
+            [workflow.id, step.type, step.config, step.order]
           );
           workflowSteps.push(stepResult.rows[0]);
         }
@@ -71,7 +119,7 @@ export async function createWorkflow(
       // Create the structured response
       const response: WorkflowCreationResponse = {
         workflow: createdWorkflow,
-        inferred_data: {
+        inferred_data: inferredData || {
           trigger: {
             type: workflow.trigger_type,
             value: workflow.trigger_value,

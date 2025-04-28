@@ -3,6 +3,7 @@ import { EmailIntegration } from "./email";
 import { SlackIntegration } from "./slack";
 import { HttpIntegration } from "./http";
 import { LogIntegration } from "./log";
+import { ClaudeIntegration } from "./claude";
 import { logger } from "../utils/logger";
 
 // Integration registry
@@ -11,6 +12,7 @@ const integrations: Record<string, Integration<any, IntegrationResult>> = {
   slack: new SlackIntegration(),
   http: new HttpIntegration(),
   log: new LogIntegration(),
+  claude: new ClaudeIntegration(),
 };
 
 // Execute an integration by type
@@ -43,4 +45,5 @@ export {
   SlackIntegration,
   HttpIntegration,
   LogIntegration,
+  ClaudeIntegration,
 };
