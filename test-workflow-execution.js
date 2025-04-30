@@ -137,16 +137,17 @@ async function runTest() {
 
     // Trigger the workflow
     const triggerResponse = await triggerWorkflow(workflow);
+    console.log(triggerResponse);
 
-    if (triggerResponse && triggerResponse.run_id) {
-      console.log(`\nRun ID: ${triggerResponse.run_id}`);
+    if (triggerResponse && triggerResponse.id) {
+      console.log(`\nRun ID: ${triggerResponse.id}`);
 
-      // Wait longer for the workflow to execute (30 seconds)
-      console.log("\nWaiting for workflow to execute (30 seconds)...");
-      await new Promise((resolve) => setTimeout(resolve, 30000));
+      // Wait longer for the workflow to execute (5 seconds)
+      console.log("\nWaiting for workflow to execute (5 seconds)...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       // Check the status of the run
-      const runStatus = await checkRunStatus(triggerResponse.run_id);
+      const runStatus = await checkRunStatus(triggerResponse.id);
 
       console.log("\n=== WORKFLOW EXECUTION SUMMARY ===");
       console.log(`Status: ${runStatus.status}`);
