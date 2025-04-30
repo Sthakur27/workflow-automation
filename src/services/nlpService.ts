@@ -45,18 +45,20 @@ Based on this description, determine:
 2. The trigger type and value that should start this workflow
 3. The sequence of steps needed to accomplish this workflow
 
-Available trigger types:
+Example trigger types:
 - "manual" - Triggered manually by a user (use a simple identifier like "topic" or "button" for the value)
 - "schedule" - Triggered on a schedule (use cron syntax for the value)
 - "webhook" - Triggered by an HTTP webhook 
 - "email" - Triggered by receiving an email (use an email address for the value)
 
-Available step types:
+Example step types:
 - "email" - Send an email (requires: to, subject, body)
 - "slack" - Send a Slack message (requires: channel, message)
 - "http" - Make an HTTP request (requires: method, url, optional: headers, body)
 - "log" - Log a message (requires: message, optional: level)
 - "claude" - Use Claude AI to generate content (requires: prompt, optional: model)
+
+There maybe other trigger types and step types that are not listed here. Use your best judgement to determine the correct trigger type and step type.
 
 Return your response in the following JSON format:
 {

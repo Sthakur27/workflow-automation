@@ -1,14 +1,14 @@
-// Test script for workflow creation using natural language
+// Test script for workflow creation with an unsupported integration type
 const axios = require("axios");
 
 // API endpoint for creating workflows
 const API_URL = "http://localhost:4000/api/workflows";
 
-// Example workflow with natural language description
+// Example workflow with natural language description that includes an unsupported integration (SMS)
 const testWorkflow = {
-  name: "Health care sign up",
+  name: "Customer Support Ticket SMS Notification",
   natural_language_description:
-    "After signing up for health care, submit the user information to Rippling via api and then email the user that signed up.",
+    "When a high priority support ticket is created, send an SMS text message to the on-call support engineer, then post a message in the #urgent-support Slack channel with the ticket details.",
 };
 
 // Create the workflow

@@ -125,7 +125,7 @@ async function checkRunStatus(runId) {
 async function runTest() {
   try {
     // Workflow name to test
-    const workflowName = "Invoice Notification";
+    const workflowName = "Customer Support Ticket SMS Notification";
 
     // Get the workflow by name
     const workflow = await getWorkflowByName(workflowName);

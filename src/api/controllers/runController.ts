@@ -6,10 +6,15 @@ export async function getWorkflowRuns(req: Request, res: Response) {
   try {
     const { id } = req.params; // workflow id
 
+    logger.info(`getWorkflowRuns controller invoked with workflowId: ${id}`);
+
     // Validate id is a valid UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
-      return res.status(400).json({ error: "Invalid workflow ID format. Must be a valid UUID." });
+      return res
+        .status(400)
+        .json({ error: "Invalid workflow ID format. Must be a valid UUID." });
     }
 
     const runs = await runService.getWorkflowRuns(id);
@@ -30,10 +35,15 @@ export async function getWorkflowRun(req: Request, res: Response) {
   try {
     const { runId } = req.params;
 
+    logger.info(`getWorkflowRun controller invoked with runId: ${runId}`);
+
     // Validate runId is a valid UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(runId)) {
-      return res.status(400).json({ error: "Invalid run ID format. Must be a valid UUID." });
+      return res
+        .status(400)
+        .json({ error: "Invalid run ID format. Must be a valid UUID." });
     }
 
     const run = await runService.getWorkflowRun(runId);
@@ -58,10 +68,15 @@ export async function retryWorkflowRun(req: Request, res: Response) {
   try {
     const { runId } = req.params;
 
+    logger.info(`retryWorkflowRun controller invoked with runId: ${runId}`);
+
     // Validate runId is a valid UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(runId)) {
-      return res.status(400).json({ error: "Invalid run ID format. Must be a valid UUID." });
+      return res
+        .status(400)
+        .json({ error: "Invalid run ID format. Must be a valid UUID." });
     }
 
     const newRun = await runService.retryWorkflowRun(runId);
@@ -85,6 +100,10 @@ export async function retryWorkflowRun(req: Request, res: Response) {
 export async function triggerWorkflow(req: Request, res: Response) {
   try {
     const { triggerType, triggerValue } = req.params;
+
+    logger.info(
+      `triggerWorkflow controller invoked with triggerType: ${triggerType}, triggerValue: ${triggerValue}`
+    );
 
     const run = await runService.triggerWorkflow(triggerType, triggerValue);
 

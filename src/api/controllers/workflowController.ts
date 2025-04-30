@@ -6,6 +6,12 @@ export async function createWorkflow(req: Request, res: Response) {
   try {
     const { name, natural_language_description } = req.body;
 
+    logger.info(
+      `createWorkflow controller invoked with name: ${name}, description length: ${
+        natural_language_description ? natural_language_description.length : 0
+      } chars`
+    );
+
     // Validate input
     if (!name) {
       return res.status(400).json({
@@ -37,6 +43,7 @@ export async function createWorkflow(req: Request, res: Response) {
 
 export async function listWorkflows(req: Request, res: Response) {
   try {
+    logger.info(`listWorkflows controller invoked`);
     const workflows = await workflowService.listWorkflows();
     return res.status(200).json(workflows);
   } catch (error) {
@@ -50,6 +57,8 @@ export async function listWorkflows(req: Request, res: Response) {
 export async function getWorkflow(req: Request, res: Response) {
   try {
     const { id } = req.params;
+
+    logger.info(`getWorkflow controller invoked with id: ${id}`);
 
     // Validate id is a valid UUID
     const uuidRegex =
@@ -81,21 +90,23 @@ export async function getWorkflow(req: Request, res: Response) {
 export async function getWorkflowByName(req: Request, res: Response) {
   try {
     const { name } = req.params;
-    
+
+    logger.info(`getWorkflowByName controller invoked with name: ${name}`);
+
     if (!name) {
       return res.status(400).json({
         error: "Workflow name is required",
       });
     }
-    
+
     const workflow = await workflowService.getWorkflowByName(name);
-    
+
     if (!workflow) {
       return res.status(404).json({
         error: `Workflow with name '${name}' not found`,
       });
     }
-    
+
     return res.status(200).json(workflow);
   } catch (error) {
     logger.error(`Error in getWorkflowByName controller:`, error);
