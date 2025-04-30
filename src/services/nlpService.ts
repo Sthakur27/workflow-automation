@@ -86,7 +86,6 @@ Return your response in the following JSON format:
     if (!jsonMatch) {
       throw new Error("Failed to extract JSON from Claude response");
     }
-    console.log("#".repeat(50));
 
     const jsonStr = jsonMatch[0];
     const parsedConfig = JSON.parse(jsonStr) as InferredWorkflowConfig;

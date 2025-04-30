@@ -14,28 +14,28 @@ export async function triggerWorkflow(
 ): Promise<WorkflowRun | null> {
   try {
     logger.info(`Triggering workflow for ${triggerType}:${triggerValue}`);
-    
+
     // Find the workflow matching the trigger
     const workflowResult = await query(
       `SELECT * FROM workflows 
        WHERE trigger_type = $1 AND trigger_value = $2`,
       [triggerType, triggerValue]
     );
-    
+
     if (workflowResult.rows.length === 0) {
       logger.info(
         `No workflows found for trigger type ${triggerType} and value ${triggerValue}`
       );
       return null;
     }
-    
+
     logger.info(
       `Found ${workflowResult.rows.length} workflows for trigger type ${triggerType} and value ${triggerValue}`
     );
-    
+
     // Get the first matching workflow
     const workflowRow = workflowResult.rows[0];
-    
+
     // Then, get the steps for this workflow
     const stepsResult = await query(
       `SELECT * FROM workflow_steps 
@@ -43,7 +43,7 @@ export async function triggerWorkflow(
        ORDER BY step_order`,
       [workflowRow.id]
     );
-    
+
     // Create the workflow object with its steps
     const workflow: Workflow = {
       id: workflowRow.id,
@@ -51,25 +51,31 @@ export async function triggerWorkflow(
       description: workflowRow.description,
       trigger_type: workflowRow.trigger_type,
       trigger_value: workflowRow.trigger_value,
-      steps: stepsResult.rows.map(step => ({
+      steps: stepsResult.rows.map((step) => ({
         id: step.id,
         workflow_id: step.workflow_id,
         step_type: step.step_type,
         step_config: step.step_config,
         step_order: step.step_order,
         created_at: step.created_at,
-        updated_at: step.updated_at
+        updated_at: step.updated_at,
       })),
       created_at: workflowRow.created_at,
       updated_at: workflowRow.updated_at,
     };
-    
+
     logger.info(
-      `Triggering workflow ${workflow.name} for ${triggerType}:${triggerValue} with ${workflow.steps?.length || 0} steps`
+      `Triggering workflow ${
+        workflow.name
+      } for ${triggerType}:${triggerValue} with ${
+        workflow.steps?.length || 0
+      } steps`
     );
-    
+
     if (!workflow.steps || workflow.steps.length === 0) {
-      logger.warn(`Workflow ${workflow.name} has no steps. This may indicate a data retrieval issue.`);
+      logger.warn(
+        `Workflow ${workflow.name} has no steps. This may indicate a data retrieval issue.`
+      );
     }
 
     // Create a new run
@@ -117,6 +123,26 @@ export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
       [run.id, run.workflow_id, run.status, run.started_at, null]
     );
 
+    // Insert each step run into the database
+    if (run.steps && run.steps.length > 0) {
+      for (const stepRun of run.steps) {
+        await query(
+          `INSERT INTO workflow_step_runs (id, workflow_run_id, workflow_step_id, status, started_at)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            stepRun.id,
+            stepRun.workflow_run_id,
+            stepRun.workflow_step_id,
+            stepRun.status,
+            stepRun.started_at,
+          ]
+        );
+      }
+      logger.info(
+        `Created ${run.steps.length} step runs for workflow run ${run.id}`
+      );
+    }
+
     logger.info(`Created run ${run.id} for workflow ${workflow.name}`);
     logger.info(`Executing run ${run.id}`);
 
@@ -145,8 +171,6 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
 
     // Store the outputs of each step to be used by subsequent steps
     const stepOutputs: { [stepId: string]: any } = {};
-
-    console.log(workflow);
 
     // Execute each step in sequence
     if (!workflow.steps || workflow.steps.length === 0) {
@@ -349,24 +373,25 @@ async function updateStepStatus(
       ? new Date()
       : null;
 
+  // Update the step run in the workflow_step_runs table
   await query(
-    `UPDATE workflow_runs 
-     SET steps = jsonb_set(
-       steps,
-       '{${stepId}}',
-       jsonb_build_object(
-         'id', '${stepId}',
-         'status', '${status}',
-         'completedAt', ${
-           completedAt ? `'${completedAt.toISOString()}'` : "null"
-         },
-         'output', ${output ? `'${JSON.stringify(output)}'` : "null"},
-         'error', ${error ? `'${error}'` : "null"}
-       )
-     )
-     WHERE id = $1`,
-    [runId]
+    `UPDATE workflow_step_runs 
+     SET status = $1, 
+         completed_at = $2, 
+         output = $3, 
+         error_message = $4
+     WHERE id = $5 AND workflow_run_id = $6`,
+    [
+      status,
+      completedAt,
+      output ? JSON.stringify(output) : null,
+      error,
+      stepId,
+      runId,
+    ]
   );
+
+  logger.debug(`Updated step ${stepId} status to ${status} for run ${runId}`);
 }
 
 export async function getWorkflowRuns(
@@ -398,43 +423,47 @@ export async function getWorkflowRun(
   runId: string
 ): Promise<WorkflowRun | null> {
   try {
-    // Get the workflow run and join with workflow_step_runs to get step details
-    const result = await query(
-      `SELECT wr.*, 
-              COALESCE(json_agg(
-                json_build_object(
-                  'id', wsr.id, 
-                  'workflow_run_id', wsr.workflow_run_id, 
-                  'workflow_step_id', wsr.workflow_step_id, 
-                  'status', wsr.status, 
-                  'started_at', wsr.started_at,
-                  'completed_at', wsr.completed_at,
-                  'input', wsr.input,
-                  'output', wsr.output,
-                  'error_message', wsr.error_message
-                ) ORDER BY wsr.id
-              ) FILTER (WHERE wsr.id IS NOT NULL), '[]') as steps
-       FROM workflow_runs wr
-       LEFT JOIN workflow_step_runs wsr ON wr.id = wsr.workflow_run_id
-       WHERE wr.id = $1
-       GROUP BY wr.id`,
-      [runId]
-    );
+    // First get the basic workflow run information
+    const runResult = await query(`SELECT * FROM workflow_runs WHERE id = $1`, [
+      runId,
+    ]);
 
-    if (result.rows.length === 0) {
+    if (runResult.rows.length === 0) {
       return null;
     }
 
-    const row = result.rows[0];
+    const runRow = runResult.rows[0];
+
+    // Then get the step runs for this workflow run
+    const stepRunsResult = await query(
+      `SELECT * FROM workflow_step_runs 
+       WHERE workflow_run_id = $1 
+       ORDER BY id`,
+      [runId]
+    );
+
+    // Map the step runs
+    const stepRuns = stepRunsResult.rows.map((stepRun) => ({
+      id: stepRun.id,
+      workflow_run_id: stepRun.workflow_run_id,
+      workflow_step_id: stepRun.workflow_step_id,
+      status: stepRun.status,
+      started_at: stepRun.started_at,
+      completed_at: stepRun.completed_at,
+      output: stepRun.output,
+      error_message: stepRun.error_message,
+    }));
+
+    // Construct and return the workflow run with its step runs
     return {
-      id: row.id,
-      workflow_id: row.workflow_id,
-      status: row.status,
-      trigger: row.trigger,
-      started_at: row.started_at,
-      completed_at: row.completed_at,
-      steps: row.steps,
-      error_message: row.error_message,
+      id: runRow.id,
+      workflow_id: runRow.workflow_id,
+      status: runRow.status,
+      trigger: runRow.trigger,
+      started_at: runRow.started_at,
+      completed_at: runRow.completed_at,
+      steps: stepRuns,
+      error_message: runRow.error_message,
     };
   } catch (error) {
     logger.error(`Error getting run ${runId}:`, error);
