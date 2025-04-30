@@ -1,50 +1,55 @@
 // Test script for workflow creation using natural language
-const axios = require('axios');
+const axios = require("axios");
 
 // API endpoint for creating workflows
-const API_URL = 'http://localhost:4000/api/workflows';
+const API_URL = "http://localhost:4000/api/workflows";
 
 // Example workflow with natural language description
 const testWorkflow = {
-  name: "Daily Report Generator",
-  natural_language_description: "Every weekday at 5 PM, generate a summary of the day's activities using Claude AI, then send it to team@example.com with the subject 'Daily Activity Report'."
+  name: "Purchase Order Notification",
+  natural_language_description:
+    "When a new purchase order is created, send an email and notify a Slack channel.",
 };
 
 // Create the workflow
 async function createWorkflow() {
   try {
-    console.log('Creating workflow with natural language description...');
+    console.log("Creating workflow with natural language description...");
     const response = await axios.post(API_URL, testWorkflow);
-    
-    console.log('\nWorkflow created successfully!');
-    console.log('\nWorkflow details:');
+
+    console.log("\nWorkflow created successfully!");
+    console.log("\nWorkflow details:");
     console.log(`ID: ${response.data.workflow.id}`);
     console.log(`Name: ${response.data.workflow.name}`);
     console.log(`Description: ${response.data.workflow.description}`);
     console.log(`Trigger Type: ${response.data.workflow.trigger_type}`);
     console.log(`Trigger Value: ${response.data.workflow.trigger_value}`);
-    
-    console.log('\nInferred data:');
-    console.log(`Trigger description: ${response.data.inferred_data.trigger.description}`);
-    
-    console.log('\nWorkflow steps:');
+
+    console.log("\nInferred data:");
+    console.log(
+      `Trigger description: ${response.data.inferred_data.trigger.description}`
+    );
+
+    console.log("\nWorkflow steps:");
     response.data.inferred_data.steps.forEach((step, index) => {
       console.log(`\nStep ${index + 1}:`);
       console.log(`Type: ${step.type}`);
       console.log(`Order: ${step.order}`);
-      console.log('Config:', JSON.stringify(step.config, null, 2));
+      console.log("Config:", JSON.stringify(step.config, null, 2));
     });
-    
-    console.log('\nMetadata:');
+
+    console.log("\nMetadata:");
     console.log(`Created at: ${response.data.metadata.created_at}`);
-    console.log(`Execution estimate: ${response.data.metadata.execution_estimate}`);
-    
+    console.log(
+      `Execution estimate: ${response.data.metadata.execution_estimate}`
+    );
+
     return response.data;
   } catch (error) {
-    console.error('Error creating workflow:');
+    console.error("Error creating workflow:");
     if (error.response) {
       console.error(`Status: ${error.response.status}`);
-      console.error('Response:', error.response.data);
+      console.error("Response:", error.response.data);
     } else {
       console.error(error.message);
     }

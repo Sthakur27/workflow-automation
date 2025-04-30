@@ -78,8 +78,36 @@ export async function getWorkflow(req: Request, res: Response) {
   }
 }
 
+export async function getWorkflowByName(req: Request, res: Response) {
+  try {
+    const { name } = req.params;
+    
+    if (!name) {
+      return res.status(400).json({
+        error: "Workflow name is required",
+      });
+    }
+    
+    const workflow = await workflowService.getWorkflowByName(name);
+    
+    if (!workflow) {
+      return res.status(404).json({
+        error: `Workflow with name '${name}' not found`,
+      });
+    }
+    
+    return res.status(200).json(workflow);
+  } catch (error) {
+    logger.error(`Error in getWorkflowByName controller:`, error);
+    return res.status(500).json({
+      error: "An error occurred while retrieving the workflow",
+    });
+  }
+}
+
 export default {
   createWorkflow,
   listWorkflows,
   getWorkflow,
+  getWorkflowByName,
 };

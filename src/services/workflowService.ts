@@ -273,8 +273,74 @@ export async function getWorkflow(id: string): Promise<Workflow | null> {
   }
 }
 
+export async function getWorkflowByName(name: string): Promise<Workflow | null> {
+  try {
+    // Query to get workflow by name and join with workflow_steps
+    const result = await query(
+      `SELECT w.*, 
+              COALESCE(json_agg(
+                json_build_object(
+                  'id', s.id, 
+                  'workflow_id', s.workflow_id, 
+                  'step_type', s.step_type, 
+                  'step_config', s.step_config, 
+                  'step_order', s.step_order,
+                  'created_at', s.created_at,
+                  'updated_at', s.updated_at
+                ) ORDER BY s.step_order
+              ) FILTER (WHERE s.id IS NOT NULL), '[]') as steps
+       FROM workflows w
+       LEFT JOIN workflow_steps s ON w.id = s.workflow_id
+       WHERE w.name = $1
+       GROUP BY w.id`,
+      [name]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const workflowRow = result.rows[0];
+    
+    // Ensure steps is properly parsed as an array
+    let steps = [];
+    if (workflowRow.steps && typeof workflowRow.steps === 'string') {
+      try {
+        steps = JSON.parse(workflowRow.steps);
+      } catch (e: any) {
+        logger.error(`Error parsing steps JSON: ${e.message}`);
+      }
+    } else if (Array.isArray(workflowRow.steps)) {
+      steps = workflowRow.steps;
+    }
+    
+    const workflow: Workflow = {
+      id: workflowRow.id,
+      name: workflowRow.name,
+      description: workflowRow.description,
+      trigger_type: workflowRow.trigger_type,
+      trigger_value: workflowRow.trigger_value,
+      steps: steps,
+      created_at: workflowRow.created_at,
+      updated_at: workflowRow.updated_at,
+    };
+    
+    logger.info(`Retrieved workflow ${workflow.name} with ${steps.length} steps`);
+    
+    if (steps.length === 0) {
+      logger.warn(`Workflow ${workflow.name} has no steps. This may indicate a data retrieval issue.`);
+    }
+
+    return workflow;
+  } catch (error) {
+    logger.error(`Error getting workflow with name ${name}:`, error);
+    throw error;
+  }
+}
+
 export default {
   createWorkflow,
   listWorkflows,
   getWorkflow,
+  getWorkflowByName,
 };

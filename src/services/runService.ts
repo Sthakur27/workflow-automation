@@ -14,40 +14,63 @@ export async function triggerWorkflow(
 ): Promise<WorkflowRun | null> {
   try {
     logger.info(`Triggering workflow for ${triggerType}:${triggerValue}`);
-    // Find workflows matching the trigger
-    const result = await query(
+    
+    // Find the workflow matching the trigger
+    const workflowResult = await query(
       `SELECT * FROM workflows 
        WHERE trigger_type = $1 AND trigger_value = $2`,
       [triggerType, triggerValue]
     );
-
-    if (result.rows.length === 0) {
+    
+    if (workflowResult.rows.length === 0) {
       logger.info(
         `No workflows found for trigger type ${triggerType} and value ${triggerValue}`
       );
       return null;
     }
-
+    
     logger.info(
-      `Found ${result.rows.length} workflows for trigger type ${triggerType} and value ${triggerValue}`
+      `Found ${workflowResult.rows.length} workflows for trigger type ${triggerType} and value ${triggerValue}`
     );
-
+    
     // Get the first matching workflow
-    // eventually support multiple workflows
-    const workflowRow = result.rows[0];
+    const workflowRow = workflowResult.rows[0];
+    
+    // Then, get the steps for this workflow
+    const stepsResult = await query(
+      `SELECT * FROM workflow_steps 
+       WHERE workflow_id = $1 
+       ORDER BY step_order`,
+      [workflowRow.id]
+    );
+    
+    // Create the workflow object with its steps
     const workflow: Workflow = {
       id: workflowRow.id,
       name: workflowRow.name,
       description: workflowRow.description,
       trigger_type: workflowRow.trigger_type,
       trigger_value: workflowRow.trigger_value,
-      steps: workflowRow.steps,
+      steps: stepsResult.rows.map(step => ({
+        id: step.id,
+        workflow_id: step.workflow_id,
+        step_type: step.step_type,
+        step_config: step.step_config,
+        step_order: step.step_order,
+        created_at: step.created_at,
+        updated_at: step.updated_at
+      })),
       created_at: workflowRow.created_at,
       updated_at: workflowRow.updated_at,
     };
+    
     logger.info(
-      `Triggering workflow ${workflow.name} for ${triggerType}:${triggerValue}`
+      `Triggering workflow ${workflow.name} for ${triggerType}:${triggerValue} with ${workflow.steps?.length || 0} steps`
     );
+    
+    if (!workflow.steps || workflow.steps.length === 0) {
+      logger.warn(`Workflow ${workflow.name} has no steps. This may indicate a data retrieval issue.`);
+    }
 
     // Create a new run
     return await createRun(workflow);
@@ -89,9 +112,9 @@ export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
 
     // Insert the run into the database
     await query(
-      `INSERT INTO workflow_runs (id, workflow_id, status, started_at)
-       VALUES ($1, $2, $3, $4)`,
-      [run.id, run.workflow_id, run.status, run.started_at]
+      `INSERT INTO workflow_runs (id, workflow_id, status, started_at, error_message)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [run.id, run.workflow_id, run.status, run.started_at, null]
     );
 
     logger.info(`Created run ${run.id} for workflow ${workflow.name}`);
@@ -111,15 +134,23 @@ export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
 
 async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
   try {
+    logger.info(
+      `Starting execution of run ${run.id} for workflow ${workflow.name} (${workflow.id})`
+    );
+
     // Update run status to RUNNING
     run.status = RunStatus.RUNNING;
     await updateRunStatus(run.id, RunStatus.RUNNING);
+    logger.info(`Run ${run.id} status updated to RUNNING`);
 
     // Store the outputs of each step to be used by subsequent steps
     const stepOutputs: { [stepId: string]: any } = {};
 
+    console.log(workflow);
+
     // Execute each step in sequence
     if (!workflow.steps || workflow.steps.length === 0) {
+      logger.info(`No steps to execute for run ${run.id}`);
       // No steps to execute, mark as completed
       run.status = RunStatus.COMPLETED;
       run.completed_at = new Date();
@@ -127,110 +158,164 @@ async function executeRun(run: WorkflowRun, workflow: Workflow): Promise<void> {
       return;
     }
 
-    for (let i = 0; i < workflow.steps.length; i++) {
-      const step = workflow.steps[i];
-      const stepRun = run.steps[i];
+    // Start executing steps sequentially
+    await executeStepSequence(run, workflow, 0, stepOutputs);
 
-      // Update step status to RUNNING
-      stepRun.status = RunStatus.RUNNING;
-      await updateStepStatus(run.id, stepRun.id, RunStatus.RUNNING);
-
-      try {
-        // Process input mapping if it exists
-        let stepConfig = { ...step.step_config };
-
-        if (step.input_mapping) {
-          // Process each input mapping
-          for (const [inputKey, mappingValue] of Object.entries(
-            step.input_mapping
-          )) {
-            // Check if it's a reference to a previous step's output
-            if (mappingValue.includes(":")) {
-              const [refStepId, outputPath] = mappingValue.split(":");
-              const stepId = parseInt(refStepId, 10);
-
-              // Ensure the referenced step exists and has output
-              if (stepOutputs[stepId]) {
-                // Navigate the output path (e.g., "data.items.0.id")
-                let value = stepOutputs[stepId];
-                const pathParts = outputPath.split(".");
-
-                for (const part of pathParts) {
-                  if (value && typeof value === "object" && part in value) {
-                    value = value[part];
-                  } else {
-                    value = undefined;
-                    break;
-                  }
-                }
-
-                // Set the input value from the previous step's output
-                stepConfig[inputKey] = value;
-
-                // Log the data passing between steps
-                logger.info(
-                  `Passing data from step ${stepId} to step ${
-                    step.id
-                  }: ${inputKey} = ${JSON.stringify(value)}`
-                );
-              } else {
-                logger.warn(
-                  `Referenced step ${stepId} not found or has no output`
-                );
-              }
-            }
-          }
-        }
-
-        // Execute the step using the appropriate integration
-        const stepType = step.step_type;
-
-        // Pass the processed config to the integration using our helper function
-        const output = await executeIntegration(stepType, stepConfig);
-
-        // Store the output for potential use by subsequent steps
-        stepOutputs[step.id] = output;
-
-        // Update step status to COMPLETED
-        stepRun.status = RunStatus.COMPLETED;
-        stepRun.completed_at = new Date();
-        stepRun.output = output;
-        await updateStepStatus(run.id, stepRun.id, RunStatus.COMPLETED, output);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        // Update step status to FAILED
-        stepRun.status = RunStatus.FAILED;
-        stepRun.completed_at = new Date();
-        stepRun.error_message = message;
-        await updateStepStatus(
-          run.id,
-          stepRun.id,
-          RunStatus.FAILED,
-          null,
-          message
-        );
-
-        // Update run status to FAILED
-        run.status = RunStatus.FAILED;
-        run.completed_at = new Date();
-        run.error_message = `Step ${i + 1} failed: ${(error as Error).message}`;
-        await updateRunStatus(run.id, RunStatus.FAILED, run.error_message);
-
-        return;
-      }
-    }
-
-    // All steps completed successfully
-    run.status = RunStatus.COMPLETED;
-    run.completed_at = new Date();
-    await updateRunStatus(run.id, RunStatus.COMPLETED);
+    // Note: All steps completed successfully is now handled in executeStepSequence
   } catch (error) {
     // Update run status to FAILED
     run.status = RunStatus.FAILED;
     run.completed_at = new Date();
     run.error_message = `Run execution error: ${(error as Error).message}`;
     await updateRunStatus(run.id, RunStatus.FAILED, run.error_message);
+    logger.error(
+      `Run ${run.id} failed with error: ${(error as Error).message}`
+    );
+  }
+}
+
+/**
+ * Execute workflow steps sequentially
+ * @param run The workflow run
+ * @param workflow The workflow
+ * @param stepIndex The current step index
+ * @param stepOutputs The outputs from previous steps
+ */
+async function executeStepSequence(
+  run: WorkflowRun,
+  workflow: Workflow,
+  stepIndex: number,
+  stepOutputs: { [stepId: string]: any }
+): Promise<void> {
+  // Check if we've completed all steps
+  if (stepIndex >= workflow.steps!.length) {
+    // All steps completed successfully
+    run.status = RunStatus.COMPLETED;
+    run.completed_at = new Date();
+    await updateRunStatus(run.id, RunStatus.COMPLETED);
+    logger.info(
+      `Run ${run.id} for workflow ${
+        workflow.name
+      } completed successfully with ${workflow.steps?.length || 0} steps`
+    );
+    return;
+  }
+
+  const step = workflow.steps![stepIndex];
+  const stepRun = run.steps[stepIndex];
+
+  // Update step status to RUNNING
+  stepRun.status = RunStatus.RUNNING;
+  await updateStepStatus(run.id, stepRun.id, RunStatus.RUNNING);
+
+  try {
+    // Process input mapping if it exists
+    let stepConfig = { ...step.step_config };
+
+    logger.info(`Processing input mapping for step ${step.id}`);
+
+    if (step.input_mapping) {
+      // Process each input mapping
+      for (const [inputKey, mappingValue] of Object.entries(
+        step.input_mapping
+      )) {
+        // Check if it's a reference to a previous step's output
+        if (typeof mappingValue === "string" && mappingValue.includes(":")) {
+          const [refStepId, outputPath] = mappingValue.split(":");
+          const stepId = parseInt(refStepId, 10);
+
+          // Ensure the referenced step exists and has output
+          if (stepOutputs[stepId]) {
+            // Navigate the output path (e.g., "data.items.0.id")
+            let value = stepOutputs[stepId];
+            const pathParts = outputPath.split(".");
+
+            for (const part of pathParts) {
+              if (value && typeof value === "object" && part in value) {
+                value = value[part];
+              } else {
+                value = undefined;
+                break;
+              }
+            }
+
+            // Set the input value from the previous step's output
+            stepConfig[inputKey] = value;
+
+            // Log the data passing between steps
+            logger.info(
+              `Passing data from step ${stepId} to step ${
+                step.id
+              }: ${inputKey} = ${JSON.stringify(value)}`
+            );
+          } else {
+            logger.warn(`Referenced step ${stepId} not found or has no output`);
+          }
+        }
+      }
+    }
+
+    // Execute the step using the appropriate integration
+    const stepType = step.step_type;
+    logger.info(
+      `Executing step ${stepIndex + 1} (${stepType}) for run ${run.id}`
+    );
+    logger.info(`Step config: ${JSON.stringify(stepConfig)}`);
+
+    // Pass the processed config to the integration using our helper function
+    logger.info(`Calling integration: ${stepType}`);
+    const output = await executeIntegration(stepType, stepConfig);
+    logger.info(`Integration ${stepType} executed successfully`);
+    if (stepType === "claude") {
+      logger.info(
+        `Claude response received: ${JSON.stringify(output).substring(
+          0,
+          200
+        )}...`
+      );
+    }
+
+    // Store the output for potential use by subsequent steps
+    stepOutputs[step.id] = output;
+
+    // Update step status to COMPLETED
+    stepRun.status = RunStatus.COMPLETED;
+    stepRun.completed_at = new Date();
+    stepRun.output = output;
+    await updateStepStatus(run.id, stepRun.id, RunStatus.COMPLETED, output);
+    logger.info(
+      `Step ${stepIndex + 1} (${stepType}) completed successfully for run ${
+        run.id
+      }`
+    );
+
+    // Continue to the next step
+    await executeStepSequence(run, workflow, stepIndex + 1, stepOutputs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    // Update step status to FAILED
+    stepRun.status = RunStatus.FAILED;
+    stepRun.completed_at = new Date();
+    stepRun.error_message = message;
+    await updateStepStatus(run.id, stepRun.id, RunStatus.FAILED, null, message);
+    logger.error(
+      `Step ${stepIndex + 1} (${step.step_type}) failed for run ${
+        run.id
+      }: ${message}`
+    );
+
+    // Update run status to FAILED
+    run.status = RunStatus.FAILED;
+    run.completed_at = new Date();
+    run.error_message = `Step ${stepIndex + 1} failed: ${
+      (error as Error).message
+    }`;
+    await updateRunStatus(run.id, RunStatus.FAILED, run.error_message);
+    logger.error(
+      `Run ${run.id} failed due to step ${stepIndex + 1} (${
+        step.step_type
+      }) failure: ${message}`
+    );
   }
 }
 
@@ -246,7 +331,7 @@ async function updateRunStatus(
 
   await query(
     `UPDATE workflow_runs 
-     SET status = $1, completed_at = $2, error = $3
+     SET status = $1, completed_at = $2, error_message = $3
      WHERE id = $4`,
     [status, completedAt, error, runId]
   );
@@ -313,9 +398,28 @@ export async function getWorkflowRun(
   runId: string
 ): Promise<WorkflowRun | null> {
   try {
-    const result = await query("SELECT * FROM workflow_runs WHERE id = $1", [
-      runId,
-    ]);
+    // Get the workflow run and join with workflow_step_runs to get step details
+    const result = await query(
+      `SELECT wr.*, 
+              COALESCE(json_agg(
+                json_build_object(
+                  'id', wsr.id, 
+                  'workflow_run_id', wsr.workflow_run_id, 
+                  'workflow_step_id', wsr.workflow_step_id, 
+                  'status', wsr.status, 
+                  'started_at', wsr.started_at,
+                  'completed_at', wsr.completed_at,
+                  'input', wsr.input,
+                  'output', wsr.output,
+                  'error_message', wsr.error_message
+                ) ORDER BY wsr.id
+              ) FILTER (WHERE wsr.id IS NOT NULL), '[]') as steps
+       FROM workflow_runs wr
+       LEFT JOIN workflow_step_runs wsr ON wr.id = wsr.workflow_run_id
+       WHERE wr.id = $1
+       GROUP BY wr.id`,
+      [runId]
+    );
 
     if (result.rows.length === 0) {
       return null;
