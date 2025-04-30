@@ -60,34 +60,44 @@ describe('Workflow Service', () => {
       };
       mockPool.connect.mockResolvedValue(mockClient as any);
       
-      // Mock workflow insertion response
-      mockClient.query.mockResolvedValueOnce({
-        rows: [{
-          id: 'workflow-uuid',
-          name: 'Purchase Order Notification',
-          description: 'Send email notifications when new purchase orders are created',
-          trigger_type: 'webhook',
-          trigger_value: 'new-purchase-order',
-          created_at: new Date(),
-          updated_at: new Date()
-        }]
-      });
-      
-      // Mock step insertion response
-      mockClient.query.mockResolvedValueOnce({
-        rows: [{
-          id: 'step-uuid',
-          workflow_id: 'workflow-uuid',
-          step_type: 'email',
-          step_config: {
-            to: 'purchasing@example.com',
-            subject: 'New Purchase Order Created',
-            body: 'A new purchase order has been created in the system.'
-          },
-          step_order: 1,
-          created_at: new Date(),
-          updated_at: new Date()
-        }]
+      // Mock client query implementation
+      mockClient.query.mockImplementation((sql, params) => {
+        // For workflow insertion
+        if (sql.includes('INSERT INTO workflows')) {
+          return Promise.resolve({
+            rows: [{
+              id: 'workflow-uuid',
+              name: 'Purchase Order Notification',
+              description: 'Send email notifications when new purchase orders are created',
+              trigger_type: 'webhook',
+              trigger_value: 'new-purchase-order',
+              created_at: new Date(),
+              updated_at: new Date()
+            }]
+          });
+        }
+        // For step insertion
+        else if (sql.includes('INSERT INTO workflow_steps')) {
+          return Promise.resolve({
+            rows: [{
+              id: 'step-uuid',
+              workflow_id: 'workflow-uuid',
+              step_type: 'email',
+              step_config: {
+                to: 'purchasing@example.com',
+                subject: 'New Purchase Order Created',
+                body: 'A new purchase order has been created in the system.'
+              },
+              step_order: 1,
+              created_at: new Date(),
+              updated_at: new Date()
+            }]
+          });
+        }
+        // For COMMIT or other queries
+        else {
+          return Promise.resolve({ rows: [] });
+        }
       });
       
       // Call the service

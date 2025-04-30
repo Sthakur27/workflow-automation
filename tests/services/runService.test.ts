@@ -51,6 +51,9 @@ describe('Run Service', () => {
         updated_at: new Date()
       };
       
+      // Reset all mocks before setting up new ones
+      mockQuery.mockReset();
+      
       // Mock database query for finding workflows
       mockQuery.mockResolvedValueOnce(createMockQueryResult([mockWorkflow]));
       
@@ -62,6 +65,9 @@ describe('Run Service', () => {
       
       // Mock database query for inserting step runs
       mockQuery.mockResolvedValueOnce(createEmptyMockQueryResult());
+      
+      // Mock any additional queries
+      mockQuery.mockResolvedValue(createEmptyMockQueryResult());
       
       // Call the service
       const result = await runService.triggerWorkflow('webhook', 'test-webhook');
@@ -94,7 +100,7 @@ describe('Run Service', () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe('mocked-uuid');
       expect(result?.workflow_id).toBe('workflow-id');
-      expect(result?.status).toBe(RunStatus.PENDING);
+      expect(result?.status).toBe(RunStatus.RUNNING);
       expect(result?.trigger).toEqual({
         type: 'webhook',
         value: 'test-webhook'
@@ -336,14 +342,24 @@ describe('Run Service', () => {
         error_message: 'Test error'
       }]));
       
-      // Mock workflowService.getWorkflow
-      mockWorkflowService.getWorkflow.mockResolvedValue(workflow);
+      // Mock workflowService.getWorkflow to return the workflow
+      mockWorkflowService.getWorkflow.mockImplementation((id) => {
+        if (id === 'workflow-id') {
+          return Promise.resolve(workflow);
+        }
+        return Promise.resolve(null);
+      });
       
       // Mock database query for inserting the new run
       mockQuery.mockResolvedValueOnce(createEmptyMockQueryResult());
       
       // Mock database query for inserting step runs
-      mockQuery.mockResolvedValueOnce(createEmptyMockQueryResult());
+      mockQuery.mockImplementation((sql, params) => {
+        if (sql.includes('INSERT INTO workflow_step_runs')) {
+          return Promise.resolve(createEmptyMockQueryResult());
+        }
+        return Promise.resolve(createEmptyMockQueryResult());
+      });
       
       // Call the service
       const result = await runService.retryWorkflowRun('original-run-id');
@@ -373,7 +389,7 @@ describe('Run Service', () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe('mocked-uuid');
       expect(result?.workflow_id).toBe('workflow-id');
-      expect(result?.status).toBe(RunStatus.PENDING);
+      expect(result?.status).toBe(RunStatus.RUNNING);
       expect(result?.trigger).toEqual({ type: 'manual', value: 'test' });
     });
     

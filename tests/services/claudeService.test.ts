@@ -1,20 +1,24 @@
 import { generateResponse, ClaudeMessage } from '../../src/services/claudeService';
 import { logger } from '../../src/utils/logger';
-import { Anthropic } from '@anthropic-ai/sdk';
 
-// Mock the Anthropic SDK
-jest.mock('@anthropic-ai/sdk');
+// Mock dependencies
 jest.mock('../../src/utils/logger');
 
-const mockAnthropicInstance = {
-  messages: {
-    create: jest.fn()
-  }
+// Create a mock for the Anthropic client
+const mockMessages = {
+  create: jest.fn()
 };
 
-// Mock the Anthropic constructor
-(Anthropic as jest.MockedClass<typeof Anthropic>).mockImplementation(() => {
-  return mockAnthropicInstance as any;
+// Mock the Anthropic SDK
+jest.mock('@anthropic-ai/sdk', () => ({
+  Anthropic: jest.fn().mockImplementation(() => ({
+    messages: mockMessages
+  }))
+}));
+
+// Reset all mocks before each test
+beforeEach(() => {
+  jest.clearAllMocks();
 });
 
 describe('Claude Service', () => {
@@ -25,7 +29,7 @@ describe('Claude Service', () => {
   describe('generateResponse', () => {
     it('should call the Claude API with the correct parameters', async () => {
       // Mock successful API response
-      mockAnthropicInstance.messages.create.mockResolvedValue({
+      mockMessages.create.mockResolvedValue({
         content: [{ type: 'text', text: 'This is a test response from Claude' }],
         model: 'claude-3-5-sonnet-latest',
         usage: {
@@ -37,8 +41,8 @@ describe('Claude Service', () => {
       // Call the service
       const result = await generateResponse('Test prompt');
 
-      // Verify Anthropic API was called with correct parameters
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
+      // Verify API was called with correct parameters
+      expect(mockMessages.create).toHaveBeenCalledWith({
         model: 'claude-3-5-sonnet-latest',
         messages: [{ role: 'user', content: 'Test prompt' }],
         max_tokens: 4000
@@ -57,7 +61,7 @@ describe('Claude Service', () => {
 
     it('should use custom model if provided', async () => {
       // Mock successful API response
-      mockAnthropicInstance.messages.create.mockResolvedValue({
+      mockMessages.create.mockResolvedValue({
         content: [{ type: 'text', text: 'This is a test response from Claude' }],
         model: 'claude-3-opus-latest',
         usage: {
@@ -70,7 +74,7 @@ describe('Claude Service', () => {
       await generateResponse('Test prompt', [], 'claude-3-opus-latest');
 
       // Verify Anthropic API was called with correct model
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
+      expect(mockMessages.create).toHaveBeenCalledWith({
         model: 'claude-3-opus-latest',
         messages: [{ role: 'user', content: 'Test prompt' }],
         max_tokens: 4000
@@ -79,7 +83,7 @@ describe('Claude Service', () => {
 
     it('should include previous messages if provided', async () => {
       // Mock successful API response
-      mockAnthropicInstance.messages.create.mockResolvedValue({
+      mockMessages.create.mockResolvedValue({
         content: [{ type: 'text', text: 'This is a test response from Claude' }],
         model: 'claude-3-5-sonnet-latest',
         usage: {
@@ -98,7 +102,7 @@ describe('Claude Service', () => {
       await generateResponse('Test prompt', messages);
 
       // Verify Anthropic API was called with correct messages
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
+      expect(mockMessages.create).toHaveBeenCalledWith({
         model: 'claude-3-5-sonnet-latest',
         messages: [
           ...messages,
@@ -110,7 +114,7 @@ describe('Claude Service', () => {
 
     it('should handle empty content in the response', async () => {
       // Mock API response with empty content
-      mockAnthropicInstance.messages.create.mockResolvedValue({
+      mockMessages.create.mockResolvedValue({
         content: [],
         model: 'claude-3-5-sonnet-latest',
         usage: {
@@ -146,7 +150,7 @@ describe('Claude Service', () => {
 
     it('should throw an error if the Claude API fails', async () => {
       // Mock API error
-      mockAnthropicInstance.messages.create.mockRejectedValueOnce(new Error('API error'));
+      mockMessages.create.mockRejectedValueOnce(new Error('API error'));
 
       // Expect the service to throw an error
       await expect(generateResponse('Test prompt')).rejects.toThrow(
