@@ -155,17 +155,40 @@ describe('Workflow Service', () => {
       };
       mockPool.connect.mockResolvedValue(mockClient as any);
       
-      // Mock workflow insertion response
-      mockClient.query.mockResolvedValueOnce({
-        rows: [{
-          id: 'workflow-uuid',
-          name: 'Test Workflow',
-          description: '',
-          trigger_type: 'manual',
-          trigger_value: 'test_workflow',
-          created_at: new Date(),
-          updated_at: new Date()
-        }]
+      // Mock client query implementation
+      mockClient.query.mockImplementation((sql, params) => {
+        // For workflow insertion
+        if (sql.includes('INSERT INTO workflows')) {
+          return Promise.resolve({
+            rows: [{
+              id: 'workflow-uuid',
+              name: 'Test Workflow',
+              description: '',
+              trigger_type: 'manual',
+              trigger_value: 'test_workflow',
+              created_at: new Date(),
+              updated_at: new Date()
+            }]
+          });
+        }
+        // For step insertion
+        else if (sql.includes('INSERT INTO workflow_steps')) {
+          return Promise.resolve({
+            rows: [{
+              id: 'step-uuid',
+              workflow_id: 'workflow-uuid',
+              step_type: 'log',
+              step_config: { message: 'Test log' },
+              step_order: 1,
+              created_at: new Date(),
+              updated_at: new Date()
+            }]
+          });
+        }
+        // For COMMIT or other queries
+        else {
+          return Promise.resolve({ rows: [] });
+        }
       });
       
       // Call the service
@@ -310,8 +333,7 @@ describe('Workflow Service', () => {
       
       // Verify database was queried for workflows
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT * FROM workflows'),
-        []
+        expect.stringContaining('SELECT * FROM workflows ORDER BY created_at DESC')
       );
       
       // Verify database was queried for steps of each workflow
