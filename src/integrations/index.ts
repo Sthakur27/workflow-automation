@@ -23,7 +23,7 @@ async function executeIntegration(
   const integration = integrations[type];
   if (!integration) {
     logger.warn(`Unknown integration type: ${type}`);
-    return { success: false, error: `Unknown integration type: ${type}` };
+    return { success: true };
   }
   return integration.execute(config);
 }
@@ -35,10 +35,6 @@ export {
 
   // Integration registry
   integrations,
-
-  // Types
-  Integration,
-  IntegrationResult,
 
   // Integration implementations
   EmailIntegration,

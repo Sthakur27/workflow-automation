@@ -136,7 +136,7 @@ export async function createRun(
             stepRun.id,
             stepRun.workflow_run_id,
             stepRun.workflow_step_id,
-            stepRun.status,
+            RunStatus.PENDING,
             stepRun.started_at,
           ]
         );
@@ -232,7 +232,6 @@ async function executeStepSequence(
   const stepRun = run.steps[stepIndex];
 
   // Update step status to RUNNING
-  stepRun.status = RunStatus.RUNNING;
   await updateStepStatus(run.id, stepRun.id, RunStatus.RUNNING);
 
   try {
@@ -306,7 +305,6 @@ async function executeStepSequence(
     stepOutputs[step.id] = output;
 
     // Update step status to COMPLETED
-    stepRun.status = RunStatus.COMPLETED;
     stepRun.completed_at = new Date();
     stepRun.output = output;
     await updateStepStatus(run.id, stepRun.id, RunStatus.COMPLETED, output);
@@ -321,7 +319,6 @@ async function executeStepSequence(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     // Update step status to FAILED
-    stepRun.status = RunStatus.FAILED;
     stepRun.completed_at = new Date();
     stepRun.error_message = message;
     await updateStepStatus(run.id, stepRun.id, RunStatus.FAILED, null, message);
