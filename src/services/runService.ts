@@ -112,7 +112,6 @@ export async function createRun(
             id: uuidv4(), // Generate a new UUID for each step run
             workflow_run_id: runId, // Use the run UUID directly
             workflow_step_id: step.id,
-            status: "pending",
             started_at: new Date(),
             output: undefined,
             error_message: undefined,

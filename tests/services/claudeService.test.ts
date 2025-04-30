@@ -146,10 +146,12 @@ describe('Claude Service', () => {
 
     it('should throw an error if the Claude API fails', async () => {
       // Mock API error
-      mockAnthropicInstance.messages.create.mockRejectedValue(new Error('API error'));
+      mockAnthropicInstance.messages.create.mockRejectedValueOnce(new Error('API error'));
 
       // Expect the service to throw an error
-      await expect(generateResponse('Test prompt')).rejects.toThrow('Failed to generate response from Claude: API error');
+      await expect(generateResponse('Test prompt')).rejects.toThrow(
+        'Failed to generate response from Claude: API error'
+      );
 
       // Verify error was logged
       expect(logger.error).toHaveBeenCalledWith('Error calling Claude API:', expect.any(Error));

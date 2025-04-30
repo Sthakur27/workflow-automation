@@ -87,7 +87,7 @@ describe('Run Service', () => {
       // Verify step run was inserted
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO workflow_step_runs'),
-        expect.arrayContaining(['mocked-uuid', 'mocked-uuid', 'step-id', 'PENDING'])
+        expect.arrayContaining(['mocked-uuid', 'mocked-uuid', 'step-id', 'pending'])
       );
       
       // Verify the result structure
@@ -366,7 +366,7 @@ describe('Run Service', () => {
       // Verify step run was inserted
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO workflow_step_runs'),
-        expect.arrayContaining(['mocked-uuid', 'mocked-uuid', 'step-id', 'PENDING'])
+        expect.arrayContaining(['mocked-uuid', 'mocked-uuid', 'step-id', 'pending'])
       );
       
       // Verify the result structure

@@ -25,7 +25,6 @@ export interface WorkflowStepRun {
   id: string; // UUID
   workflow_run_id: string; // UUID
   workflow_step_id: string; // UUID
-  status: string; // 'pending', 'running', 'completed', 'failed'
   started_at: Date;
   completed_at?: Date;
   input?: any;
