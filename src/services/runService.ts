@@ -121,10 +121,16 @@ export async function createRun(
 
     // Insert the run into the database
     await query(
-      `INSERT INTO workflow_runs (id, workflow_id, status, started_at, error_message)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [run.id, run.workflow_id, run.status, run.started_at, null]
+      `INSERT INTO workflow_runs (id, workflow_id, status, started_at, error_message, retry_of)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [run.id, run.workflow_id, run.status, run.started_at, null, run.retry_of]
     );
+
+    if (run.retry_of) {
+      logger.info(
+        `Created retry run ${run.id} for original run ${run.retry_of}`
+      );
+    }
 
     // Insert each step run into the database
     if (run.steps && run.steps.length > 0) {
@@ -464,6 +470,7 @@ export async function getWorkflowRun(
       completed_at: runRow.completed_at,
       steps: stepRuns,
       error_message: runRow.error_message,
+      retry_of: runRow.retry_of,
     };
   } catch (error) {
     logger.error(`Error getting run ${runId}:`, error);
