@@ -89,13 +89,17 @@ export async function triggerWorkflow(
   }
 }
 
-export async function createRun(workflow: Workflow): Promise<WorkflowRun> {
+export async function createRun(
+  workflow: Workflow,
+  retryOf?: string
+): Promise<WorkflowRun> {
   try {
     // Create a new run ID
     const runId = uuidv4();
 
     const run: WorkflowRun = {
       id: runId,
+      retry_of: retryOf,
       workflow_id: workflow.id,
       status: RunStatus.PENDING,
       trigger: {
@@ -492,8 +496,10 @@ export async function retryWorkflowRun(
       throw new Error(`Workflow ${run.workflow_id} not found`);
     }
 
+    const retryOf = run.id;
+
     // Create a new run
-    return await createRun(workflow);
+    return await createRun(workflow, retryOf);
   } catch (error) {
     logger.error(`Error retrying run ${runId}:`, error);
     throw error;

@@ -12,13 +12,15 @@ async function getWorkflowByName(name) {
     // Use the direct endpoint to get workflow by name
     const response = await axios.get(`${API_BASE_URL}/workflows/name/${name}`);
     console.log("Workflow retrieved successfully!");
-    
+
     // Log the number of steps to help with debugging
     const workflow = response.data;
     console.log(`Workflow has ${workflow.steps?.length || 0} steps`);
-    
+
     if (!workflow.steps || workflow.steps.length === 0) {
-      console.warn("Warning: Workflow has no steps. This may cause issues during execution.");
+      console.warn(
+        "Warning: Workflow has no steps. This may cause issues during execution."
+      );
     }
 
     return workflow;
@@ -123,7 +125,7 @@ async function checkRunStatus(runId) {
 async function runTest() {
   try {
     // Workflow name to test
-    const workflowName = "Purchase Order Notification";
+    const workflowName = "Invoice Notification";
 
     // Get the workflow by name
     const workflow = await getWorkflowByName(workflowName);
@@ -135,22 +137,26 @@ async function runTest() {
 
     // Trigger the workflow
     const triggerResponse = await triggerWorkflow(workflow);
-    
+
     if (triggerResponse && triggerResponse.run_id) {
       console.log(`\nRun ID: ${triggerResponse.run_id}`);
-      
+
       // Wait longer for the workflow to execute (30 seconds)
       console.log("\nWaiting for workflow to execute (30 seconds)...");
-      await new Promise(resolve => setTimeout(resolve, 30000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 30000));
+
       // Check the status of the run
       const runStatus = await checkRunStatus(triggerResponse.run_id);
-      
+
       console.log("\n=== WORKFLOW EXECUTION SUMMARY ===");
       console.log(`Status: ${runStatus.status}`);
-      console.log(`Started: ${new Date(runStatus.started_at).toLocaleString()}`);
+      console.log(
+        `Started: ${new Date(runStatus.started_at).toLocaleString()}`
+      );
       if (runStatus.completed_at) {
-        console.log(`Completed: ${new Date(runStatus.completed_at).toLocaleString()}`);
+        console.log(
+          `Completed: ${new Date(runStatus.completed_at).toLocaleString()}`
+        );
       }
       if (runStatus.error_message) {
         console.log(`Error: ${runStatus.error_message}`);

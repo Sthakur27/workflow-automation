@@ -6,9 +6,9 @@ const API_URL = "http://localhost:4000/api/workflows";
 
 // Example workflow with natural language description
 const testWorkflow = {
-  name: "Purchase Order Notification",
+  name: "Invoice Notification",
   natural_language_description:
-    "When a new purchase order is created, send an email and notify a Slack channel.",
+    "After generating an invoice, email the finance team and send a message in #finance on Slack.",
 };
 
 // Create the workflow
